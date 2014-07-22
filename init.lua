@@ -90,8 +90,7 @@ local function get_floor_ps(ps, ps_list)
 		xmin, xmax = get_minmax_coord(xmin, xmax, p.x)
 		zmin, zmax = get_minmax_coord(zmin, zmax, p.z)
 	end
-	local pos = {x=xmin+(xmax-xmin)*0.5, z=zmin+(zmax-zmin)*0.5}
-	return get_inside_ps(pos, ps, {xmin-1, xmax+1, zmin-1, zmax+1})
+	return get_inside_ps({x=(xmin+xmax)*0.5, z=(zmax+zmin)*0.5}, ps, {xmin-1, xmax+1, zmin-1, zmax+1})
 end
 
 -- gibt die Dach Positionen
@@ -159,12 +158,13 @@ end
 local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 	local ps,ps_list = get_floor_ps(wall_ps, wall_ps_list)
 	for _,p in pairs(ps_list) do
-		if p.z%2 == 0
-		or (p.x%4 == 1 and p.z%4 == 1)
-		or (p.x%4 == 3 and p.z%4 == 3) then
-			minetest.set_node({x=p.x, y=y-1, z=p.z}, {name="default:cobble"})
+		local x,z = p.x,p.z
+		if z%2 == 0
+		or (x%4 == 1 and z%4 == 1)
+		or (x%4 == 3 and z%4 == 3) then
+			minetest.set_node({x=x, y=y-1, z=z}, {name="default:cobble"})
 		else
-			minetest.set_node({x=p.x, y=y-1, z=p.z}, {name="default:desert_cobble"})
+			minetest.set_node({x=x, y=y-1, z=z}, {name="default:desert_cobble"})
 		end
 	end
 	ps_list = get_roof_ps(wall_ps_list, ps, ps_list)
@@ -176,6 +176,9 @@ local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 		else
 			minetest.set_node({x=p.x, y=y+4+h2, z=p.z}, {name="stairs:slab_wood"})
 		end
+	end
+	for _,p in pairs(wall_ps_list) do
+		minetest.set_node({x=p.x, y=y+5, z=p.z}, {name="default:desert_stone"})
 	end
 end
 
