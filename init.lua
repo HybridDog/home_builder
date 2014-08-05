@@ -177,9 +177,9 @@ local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 			minetest.set_node({x=p.x, y=y+4+h2, z=p.z}, {name="stairs:slab_wood"})
 		end
 	end
-	for _,p in pairs(wall_ps_list) do
+	--[[for _,p in pairs(wall_ps_list) do
 		minetest.set_node({x=p.x, y=y+5, z=p.z}, {name="default:desert_stone"})
-	end
+	end]]
 end
 
 -- erstellt die Wände
@@ -193,7 +193,8 @@ end
 -- erstellt das haus
 local function make_house(pos)
 	local wall_ps, wall_ps_list = get_wall_ps(pos)
-	if not wall_ps then
+	if not wall_ps
+	or #wall_ps_list < 2 then
 		return
 	end
 	make_walls(wall_ps_list)
