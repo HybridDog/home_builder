@@ -1,3 +1,12 @@
+local used_nodes = {
+	wall = "default:stone",
+	glass = "default:glass",
+	floor1 = "default:cobble",
+	floor2 = "default:desert_cobble",
+	roof1 = "default:wood",
+	roof2 = "stairs:slab_wood"
+}
+
 -- findet die naechste Position der Wandsaeulen
 local function get_next_ps(pos, ps)
 	local tab = {}
@@ -49,7 +58,7 @@ local function get_minmax_coord(oldmin, oldmax, new)
 	return math.min(oldmin, new), math.max(oldmax, new)
 end
 
--- gibt die Positionen innerhalb an und funktioniert nicht richtig (Wandpruefung)
+--[[ gibt die Positionen innerhalb an und funktioniert irgendwie nicht richtig (Wandpruefung)
 local function get_inside_ps(startpos, ps, corners)
 	local tab = {startpos}
 	local tab2 = {}
@@ -81,6 +90,52 @@ local function get_inside_ps(startpos, ps, corners)
 		end
 	end
 	return tab2, tab3
+end]]
+
+-- gibt die Positionen innerhalb an (hoffentlich)
+local function get_inside_ps(ps, corners)
+	local xmin, xmax, zmin, zmax = unpack(corners)
+	local tab2,num = {},1
+	local tab3 = {}
+	for z = zmin, zmax do
+		local tab,n = {},1
+		for x = xmin, xmax do
+			if ps[z.." "..x] then
+				tab[n] = x
+				n = n+1
+			end
+		end
+		local count = #tab
+		if count == 2 then
+			for x = tab[1]+1, tab[2]-1 do
+				tab3[z.." "..x] = true
+				tab2[num] = {x=x, z=z}
+				num = num+1
+			end
+		elseif count > 2 then
+			local inside, last
+			for x = tab[1], tab[count] do
+				if ps[z.." "..x] then
+					if not last then
+						if inside then
+							inside = false
+						else
+							inside = true
+						end
+					end
+					last = true
+				else
+					last = false
+					if inside then
+						tab3[z.." "..x] = true
+						tab2[num] = {x=x, z=z}
+						num = num+1
+					end
+				end
+			end
+		end
+	end
+	return tab3, tab2
 end
 
 -- gibt die Boden Positionen
@@ -90,18 +145,27 @@ local function get_floor_ps(ps, ps_list)
 		xmin, xmax = get_minmax_coord(xmin, xmax, p.x)
 		zmin, zmax = get_minmax_coord(zmin, zmax, p.z)
 	end
-	return get_inside_ps({x=(xmin+xmax)*0.5, z=(zmax+zmin)*0.5}, ps, {xmin-1, xmax+1, zmin-1, zmax+1})
+	return get_inside_ps(ps, {xmin-1, xmax+1, zmin-1, zmax+1}) --{x=(xmin+xmax)*0.5, z=(zmax+zmin)*0.5}
 end
 
 -- gibt die Dach Positionen
 local function get_roof_ps(wall_ps_list, ps, ps_list)
+	for _,p in pairs(wall_ps_list) do
+		local pstr = p.z.." "..p.x
+		if not ps[pstr] then
+			table.insert(ps_list, p)
+			ps[pstr] = true
+		end
+	end
 	for _,p in pairs(wall_ps_list) do
 		for i = -1,1,2 do
 			for _,pos in pairs({
 				{x=p.x+i, z=p.z},
 				{x=p.x, z=p.z+i},
 			}) do
-				if not ps[pos.z.." "..pos.x] then
+				local pstr = pos.z.." "..pos.x
+				if not ps[pstr] then
+					ps[pstr] = true
 					pos.h = true
 					table.insert(ps_list, pos)
 				end
@@ -120,7 +184,7 @@ local function get_wall_dist(pos, wall_ps)
 		return 0
 	end
 	local dist = 1
-	while dist <= 9 do
+	while dist <= 99 do
 		for z = -dist,dist do
 			for x = -dist,dist do
 				if math.abs(x+z) == dist
@@ -131,13 +195,13 @@ local function get_wall_dist(pos, wall_ps)
 		end
 		dist = dist+1
 	end
-	return 10
+	return 100
 end
 
 -- macht eine Saeule der Wand
 local glass_count = -1
 local function make_wall(pos)
-	local used_block = "default:stone"
+	local used_block = used_nodes.wall
 	local nam
 	minetest.set_node(pos, {name=used_block})
 	if glass_count >= 8
@@ -146,7 +210,7 @@ local function make_wall(pos)
 		nam = used_block
 		glass_count = 0
 	else
-		nam = "default:glass"
+		nam = used_nodes.glass
 		glass_count = glass_count+1
 	end
 	for i = 1,3 do
@@ -154,27 +218,36 @@ local function make_wall(pos)
 	end
 end
 
+-- macht einen Block des Bodens
+local function make_floor_node(x, y, z)
+	if z%2 == 0
+	or (x%4 == 1 and z%4 == 1)
+	or (x%4 == 3 and z%4 == 3) then
+		minetest.set_node({x=x, y=y, z=z}, {name=used_nodes.floor1})
+	else
+		minetest.set_node({x=x, y=y, z=z}, {name=used_nodes.floor2})
+	end
+end
+
 -- erstellt den Boden und das Dach
 local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 	local ps,ps_list = get_floor_ps(wall_ps, wall_ps_list)
+	y = y-1
 	for _,p in pairs(ps_list) do
-		local x,z = p.x,p.z
-		if z%2 == 0
-		or (x%4 == 1 and z%4 == 1)
-		or (x%4 == 3 and z%4 == 3) then
-			minetest.set_node({x=x, y=y-1, z=z}, {name="default:cobble"})
-		else
-			minetest.set_node({x=x, y=y-1, z=z}, {name="default:desert_cobble"})
-		end
+		make_floor_node(p.x, y, p.z)
 	end
+	for _,p in pairs(wall_ps_list) do
+		make_floor_node(p.x, y, p.z)
+	end
+	y = y+1
 	ps_list = get_roof_ps(wall_ps_list, ps, ps_list)
 	for _,p in pairs(ps_list) do
 		local h = get_wall_dist(p, wall_ps)/2
 		local h2 = math.ceil(h)
 		if h == h2 then
-			minetest.set_node({x=p.x, y=y+4+h, z=p.z}, {name="default:wood"})
+			minetest.set_node({x=p.x, y=y+4+h, z=p.z}, {name=used_nodes.roof1})
 		else
-			minetest.set_node({x=p.x, y=y+4+h2, z=p.z}, {name="stairs:slab_wood"})
+			minetest.set_node({x=p.x, y=y+4+h2, z=p.z}, {name=used_nodes.roof2})
 		end
 	end
 	--[[for _,p in pairs(wall_ps_list) do
@@ -206,6 +279,7 @@ local function make_house(pos)
 	end]]
 end
 
+local tmp = 0
 minetest.register_node("home_builder:block", {
 	description = "house",
 	tiles = {"ac_block.png"},
@@ -218,4 +292,39 @@ minetest.register_node("home_builder:block", {
 		end
 		make_house(pos)
 	end,
+	on_use = function(itemstack, player, pointed_thing)
+		if not player
+		or not pointed_thing then
+			return
+		end
+		local pos = pointed_thing.under
+		if not pos then
+			return
+		end
+		local nam = minetest.get_node(pos).name
+		local msg = "[home_builder] "
+		if tmp == 0 then
+			used_nodes.wall = nam
+			msg = msg.."wall"
+		elseif tmp == 1 then
+			used_nodes.glass = nam
+			msg = msg.."glass"
+		elseif tmp == 2 then
+			used_nodes.floor1 = nam
+			msg = msg.."main floor"
+		elseif tmp == 3 then
+			used_nodes.floor2 = nam
+			msg = msg.."second floor"
+		elseif tmp == 4 then
+			used_nodes.roof1 = nam
+			msg = msg.."roof"
+		elseif tmp == 5 then
+			used_nodes.roof2 = nam
+			msg = msg.."roof slab"
+		end
+		tmp = (tmp+1)%6
+		msg = msg.." set to "..nam
+		print(msg)
+		minetest.chat_send_all(msg)
+	end
 })
