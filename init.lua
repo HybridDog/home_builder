@@ -279,7 +279,6 @@ local function make_house(pos)
 	end]]
 end
 
-local tmp = 0
 minetest.register_node("home_builder:block", {
 	description = "house",
 	tiles = {"ac_block.png"},
@@ -301,29 +300,34 @@ minetest.register_node("home_builder:block", {
 		if not pos then
 			return
 		end
+		local control = player:get_player_control()
 		local nam = minetest.get_node(pos).name
 		local msg = "[home_builder] "
-		if tmp == 0 then
-			used_nodes.wall = nam
-			msg = msg.."wall"
-		elseif tmp == 1 then
+		if control.aux1 then
+			if control.sneak then
+				used_nodes.roof2 = nam
+				msg = msg.."roof slab"
+			else
+				used_nodes.roof1 = nam
+				msg = msg.."roof"
+			end
+		elseif control.up
+		and control.down then
+			if control.sneak then
+				used_nodes.floor2 = nam
+				msg = msg.."second floor"
+			else
+				used_nodes.floor1 = nam
+				msg = msg.."main floor"
+			end
+		elseif control.sneak then
 			used_nodes.glass = nam
 			msg = msg.."glass"
-		elseif tmp == 2 then
-			used_nodes.floor1 = nam
-			msg = msg.."main floor"
-		elseif tmp == 3 then
-			used_nodes.floor2 = nam
-			msg = msg.."second floor"
-		elseif tmp == 4 then
-			used_nodes.roof1 = nam
-			msg = msg.."roof"
-		elseif tmp == 5 then
-			used_nodes.roof2 = nam
-			msg = msg.."roof slab"
+		else
+			used_nodes.wall = nam
+			msg = msg.."wall"
 		end
-		tmp = (tmp+1)%6
-		msg = msg.." set to "..nam
+		msg = msg..": "..nam
 		print(msg)
 		minetest.chat_send_all(msg)
 	end
