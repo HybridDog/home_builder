@@ -4,7 +4,8 @@ local used_nodes = {
 	floor1 = "default:cobble",
 	floor2 = "default:desert_cobble",
 	roof1 = "default:wood",
-	roof2 = "stairs:slab_wood"
+	roof2 = "stairs:slab_wood",
+	bef = "wool:white"
 }
 
 -- findet die naechste Position der Wandsaeulen
@@ -16,7 +17,7 @@ local function get_next_ps(pos, ps)
 			{x=pos.x, y=pos.y, z=pos.z+i},
 		}) do
 			if not ps[p.z.." "..p.x]
-			and minetest.get_node(p).name == "default:desert_stone" then
+			and minetest.get_node(p).name == used_nodes.bef then
 				table.insert(tab, p)
 			end
 		end
@@ -25,7 +26,7 @@ local function get_next_ps(pos, ps)
 		for j = -1,1,2 do
 			local p = {x=pos.x+i, y=pos.y, z=pos.z+j}
 			if not ps[p.z.." "..p.x]
-			and minetest.get_node(p).name == "default:desert_stone" then
+			and minetest.get_node(p).name == used_nodes.bef then
 				table.insert(tab, p)
 			end
 		end
@@ -36,7 +37,7 @@ end
 -- gibt die Positionen der Wandsaeulen an
 local function get_wall_ps(pos)
 	pos.y = pos.y-1
-	if minetest.get_node(pos).name ~= "default:desert_stone" then
+	if minetest.get_node(pos).name ~= used_nodes.bef then
 		return
 	end
 	local tab = {}
@@ -204,6 +205,7 @@ local function make_wall(pos)
 	local used_block = used_nodes.wall
 	local nam
 	minetest.set_node(pos, {name=used_block})
+	minetest.set_node({x=pos.x, y=pos.y-1, z=pos.z}, {name=used_block})
 	if glass_count >= 8
 	or (math.random(8) == 1 and glass_count >= 4)
 	or glass_count == -1 then
@@ -236,9 +238,9 @@ local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 	for _,p in pairs(ps_list) do
 		make_floor_node(p.x, y, p.z)
 	end
-	for _,p in pairs(wall_ps_list) do
+	--[[for _,p in pairs(wall_ps_list) do
 		make_floor_node(p.x, y, p.z)
-	end
+	end]]
 	y = y+1
 	ps_list = get_roof_ps(wall_ps_list, ps, ps_list)
 	for _,p in pairs(ps_list) do
