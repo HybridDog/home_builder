@@ -282,7 +282,7 @@ local function make_house(pos)
 end
 
 minetest.register_node("home_builder:block", {
-	description = "house",
+	description = "Hut Builder",
 	tiles = {"ac_block.png"},
 	groups = {snappy=1,bendy=2,cracky=1},
 	sounds = default_stone_sounds,
@@ -333,4 +333,140 @@ minetest.register_node("home_builder:block", {
 		print(msg)
 		minetest.chat_send_all(msg)
 	end
+})
+
+
+local function pos_to_string(pos, y)
+	if y then
+		return pos.x.." "..pos.y.." "..pos.z
+	end
+	return pos.x.." "..pos.z
+end
+
+local function pos_allowed(pos, tab)
+	if tab[pos_to_string(pos)]
+	or minetest.get_node(pos).name ~= "air"
+	or minetest.get_node({x=pos.x, y=pos.y-1, z=pos.z}).name == "air" then
+		return false
+	end
+	for b = -1,1,2 do
+		for _,p in pairs({
+			{x=pos.x+b, y=pos.y, z=pos.z},
+			{x=pos.x, y=pos.y, z=pos.z+b},
+		}) do
+			if minetest.get_node(p).name ~= "air"
+			or minetest.get_node({x=p.x, y=p.y-1, z=p.z}).name == "air" then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function get_next_pos(pos, tab)
+	for b = -1,1,2 do
+		for _,p in pairs({
+			{x=pos.x+b, y=pos.y, z=pos.z},
+			{x=pos.x, y=pos.y, z=pos.z+b},
+		}) do
+			if pos_allowed(p, tab) then
+				return p
+			end
+		end
+	end
+	for i = -1,1,2 do
+		for j = -1,1,2 do
+			local p = {x=pos.x+i, y=pos.y, z=pos.z+j}
+			if pos_allowed(p, tab) then
+				return p
+			end
+		end
+	end
+	return false
+end
+
+local function clean_tab(tab)
+	for i,_ in pairs(tab) do
+		local x, z = unpack(string.split(i, " "))
+		local pstr = x.." "..z
+		if (
+			tab[x+1 .." "..z]
+			or tab[x-1 .." "..z]
+		)
+		and (
+			tab[x.." "..z+1]
+			or tab[x.." "..z-1]
+		) then
+			tab[pstr] = nil
+		end
+	end
+	return tab
+end
+
+local function get_pos_table(pos)
+	local tab = {}
+	local n = 1
+	while n < 60 do
+		pos = get_next_pos(pos, tab)
+		if not pos then
+			return tab
+		end
+		tab[pos_to_string(pos)] = true
+		n = n+1
+	end
+	tab = clean_tab(tab)
+	return tab
+end
+
+local function make_preparation(pos)
+	for i,_ in pairs(get_pos_table(pos)) do
+		local x, z = unpack(string.split(i, " "))
+		local p = {x=x, y=pos.y, z=z}
+		minetest.set_node(p, {name=used_nodes.bef})
+	end
+--[[	local startpos = vector.new(pos)
+	local used_ps = {}
+	pos.z = pos.z+r
+	local count = 0
+	while count < 60 do
+		count = count+1
+		used_ps[pos.x.." "..pos.z] = true
+		--if nd1 == "air"
+		--and nd2 ~= "air" then
+			minetest.set_node(pos, {name=used_nodes.bef})
+		--end
+		for _,p in pairs({
+			{x=pos.x+1, z=pos.z},
+			{x=pos.x-1, z=pos.z},
+			{x=pos.x, z=pos.z+1},
+			{x=pos.x, z=pos.z-1},
+		}) do
+			local nd1 = minetest.get_node({x=p.x, y=pos.y, z=p.z}).name
+			local nd2 = minetest.get_node({x=p.x, y=pos.y-1, z=p.z}).name
+			local ra = math.floor(( (p.x-startpos.x)^2 + (p.z-startpos.z)^2 )/10+0.5)
+				minetest.chat_send_all(ra.." "..rr)
+			if not used_ps[p.x.." "..p.z]
+			and nd2 ~= "air"
+			and nd1 == "air"
+			and ra == rr then
+				pos.x = p.x
+				pos.z = p.z
+				break
+			end
+		end
+	end]]
+end
+
+minetest.register_node("home_builder:prep", {
+	description = "Hut Preparation",
+	tiles = {"ac_block.png"},
+	groups = {snappy=1,bendy=2,cracky=1},
+	sounds = default_stone_sounds,
+	on_place = function(_, _, pointed_thing)
+		local pos = pointed_thing.above
+		if not pos then
+			return
+		end
+		make_preparation(pos)
+	end,
 })
