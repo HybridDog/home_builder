@@ -283,7 +283,7 @@ end
 
 minetest.register_node("home_builder:block", {
 	description = "Hut Builder",
-	tiles = {"ac_block.png"},
+	tiles = {"home_builder.png"},
 	groups = {snappy=1,bendy=2,cracky=1},
 	sounds = default_stone_sounds,
 	on_place = function(_, _, pointed_thing)
@@ -335,7 +335,7 @@ minetest.register_node("home_builder:block", {
 	end
 })
 
-
+--[[
 local function pos_to_string(pos, y)
 	if y then
 		return pos.x.." "..pos.y.." "..pos.z
@@ -385,7 +385,41 @@ local function get_next_pos(pos, tab)
 	return false
 end
 
+local function get_pos_table(pos)
+	local tab = {}
+	local n = 1
+	while n < 60 do
+		pos = get_next_pos(pos, tab)
+		if not pos then
+			return tab
+		end
+		tab[pos_to_string(pos)] = true
+		n = n+1
+	end
+	tab = clean_tab(tab)
+	return tab
+end]]
+
+local function get_p_yaw(x, y)
+	if x == 0 then
+		if y > 0 then
+			return 0
+		end
+		return math.pi
+	else
+		local yaw = math.atan(y/x)
+		return x > 0 and yaw+math.pi*1.5 or yaw+math.pi*0.5
+	end
+end
+
+local function sort_func(a, b)
+	return get_p_yaw(a[1], a[2]) > get_p_yaw(b[1], b[2])
+end
+
+-- removes unwanted positions from a table, where's the mistake?
 local function clean_tab(tab)
+
+	-- remove some outside positions
 	for i,_ in pairs(tab) do
 		local x, z = unpack(string.split(i, " "))
 		local pstr = x.." "..z
@@ -400,31 +434,117 @@ local function clean_tab(tab)
 			tab[pstr] = nil
 		end
 	end
+
+	-- removes corners (3 times)
+	for _ = 1,3 do
+		for i,_ in pairs(tab) do
+			local x, z = unpack(string.split(i, " "))
+			local found = 0
+			for a = -1,1 do
+				for b = -1,1 do
+					local pstr = x+a.." "..z+b
+					if tab[pstr] then
+						found = found+1
+					end
+				end
+			end
+			if found < 3 then
+				tab[x.." "..z] = nil
+			end
+		end
+	end
 	return tab
 end
 
-local function get_pos_table(pos)
-	local tab = {}
-	local n = 1
-	while n < 60 do
-		pos = get_next_pos(pos, tab)
-		if not pos then
-			return tab
-		end
-		tab[pos_to_string(pos)] = true
-		n = n+1
+local function unneccesary(x,z,t)
+	if (
+		t[x+1 .." "..z]
+		or t[x-1 .." "..z]
+	)
+	and (
+		t[x.." "..z+1]
+		or t[x.." "..z-1]
+	) then
+		return true
 	end
-	tab = clean_tab(tab)
-	return tab
 end
 
 local function make_preparation(pos)
-	for i,_ in pairs(get_pos_table(pos)) do
+
+	-- make a circle
+	local circle = vector.circle(7)
+
+	-- take random positions near it
+	local circran = {}
+	for n,p in pairs(circle) do
+		local m = n/2
+		if m == math.floor(m) then
+			circran[m] = {p.x+math.random(-2,2), p.z+math.random(-2,2)}
+		end
+	end
+
+	-- sort them by their angle to the middle
+	table.sort(circran, sort_func)
+
+	-- connect them with lines
+	local lin = {}
+	local lin2 = {}
+	for n = 1,#circran do
+		local p1 = circran[n]
+		local p2 = circran[n+1] or circran[1]
+		for _,i in pairs(vector.twoline(p2[1]-p1[1], p2[2]-p1[2])) do
+			local x,z = i[1]+p1[1], i[2]+p1[2]
+			table.insert(lin, {x, z})
+			lin2[x.." "..z] = true
+		end
+	end
+
+	-- remove unallowed positions
+	-- remove inside nodes made by lines
+	for n,p in pairs(lin) do
+		local x,z = unpack(p)
+		local dist = math.hypot(x, z)
+		local tab = {}
+		for i = -1,1,2 do
+			for _,j in pairs({
+				{i, 0},
+				{0, i},
+			}) do
+				local xc, zc = x+j[1], z+j[2]
+				local pstr = xc.." "..zc
+				if lin2[pstr]
+				and math.hypot(xc, zc) >= dist then
+					tab[pstr] = true
+				end
+			end
+		end
+		if unneccesary(x, z, tab) then
+			lin[n] = nil
+		end
+	end
+
+	-- update lin2
+	lin2 = {}
+	for _,p in pairs(lin) do
+		lin2[p[1].." "..p[2]] = true
+	end
+	lin = nil
+
+	-- removes other unwanted positions
+	lin2 = clean_tab(lin2)
+
+	-- set the nodes
+	for i,_ in pairs(lin2) do
+		local x, z = unpack(string.split(i, " "))
+		local p = {x=x+pos.x, y=pos.y, z=z+pos.z}
+		minetest.set_node(p, {name=used_nodes.bef})
+	end
+--[[	for i,_ in pairs(get_pos_table(pos)) do
 		local x, z = unpack(string.split(i, " "))
 		local p = {x=x, y=pos.y, z=z}
 		minetest.set_node(p, {name=used_nodes.bef})
 	end
---[[	local startpos = vector.new(pos)
+	local startpos = vector.new(pos)
 	local used_ps = {}
 	pos.z = pos.z+r
 	local count = 0
@@ -459,7 +579,7 @@ end
 
 minetest.register_node("home_builder:prep", {
 	description = "Hut Preparation",
-	tiles = {"ac_block.png"},
+	tiles = {"home_builder.png"},
 	groups = {snappy=1,bendy=2,cracky=1},
 	sounds = default_stone_sounds,
 	on_place = function(_, _, pointed_thing)

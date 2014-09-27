@@ -3,5 +3,6 @@ after: http://i.imgur.com/uqZdK8Z.png
 
 
 TODO:
-— add nodes and textures
+— add more nodes and textures
 — add new houses
+— fix clean_tab
