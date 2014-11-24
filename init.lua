@@ -285,7 +285,7 @@ minetest.register_node("home_builder:block", {
 	description = "Hut Builder",
 	tiles = {"home_builder.png"},
 	groups = {snappy=1,bendy=2,cracky=1},
-	sounds = default_stone_sounds,
+	sounds = default.node_sound_stone_defaults(),
 	on_place = function(_, _, pointed_thing)
 		local pos = pointed_thing.above
 		if not pos then
@@ -581,7 +581,7 @@ minetest.register_node("home_builder:prep", {
 	description = "Hut Preparation",
 	tiles = {"home_builder.png"},
 	groups = {snappy=1,bendy=2,cracky=1},
-	sounds = default_stone_sounds,
+	sounds = default.node_sound_stone_defaults(),
 	on_place = function(_, _, pointed_thing)
 		local pos = pointed_thing.above
 		if not pos then
