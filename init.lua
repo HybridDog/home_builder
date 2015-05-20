@@ -492,7 +492,7 @@ local function make_preparation(pos)
 	for n = 1,#circran do
 		local p1 = circran[n]
 		local p2 = circran[n+1] or circran[1]
-		for _,i in pairs(vector.twoline(p2[1]-p1[1], p2[2]-p1[2])) do
+		for _,i in ipairs(vector.twoline(p2[1]-p1[1], p2[2]-p1[2])) do
 			local x,z = i[1]+p1[1], i[2]+p1[2]
 			table.insert(lin, {x, z})
 			lin2[x.." "..z] = true
@@ -500,7 +500,7 @@ local function make_preparation(pos)
 	end
 
 	-- remove unallowed positions
-	-- remove inside nodes made by lines
+	--[[ remove inside nodes made by lines
 	for n,p in pairs(lin) do
 		local x,z = unpack(p)
 		local dist = math.hypot(x, z)
@@ -520,18 +520,58 @@ local function make_preparation(pos)
 		end
 		if unneccesary(x, z, tab) then
 			lin[n] = nil
+			--lin2[x.." "..z] = nil
 		end
 	end
 
 	-- update lin2
 	lin2 = {}
 	for _,p in pairs(lin) do
-		lin2[p[1].." "..p[2]] = true
+		lin2[p[1].." "..p[2] ] = true
 	end
 	lin = nil
 
 	-- removes other unwanted positions
 	lin2 = clean_tab(lin2)
+	--]]
+
+	local tab = {}
+	local x,z = unpack(lin[1])
+	local yaw = get_p_yaw(x, z)
+	while yaw do
+		tab[x.." "..z] = true
+		local ps = {}
+		for i = -1,1 do
+			for j = -1,1 do
+				local xc, zc = x+i, z+j
+				local cyaw = get_p_yaw(xc, zc)
+				if cyaw >= yaw
+				and lin2[xc.." "..zc]
+				and not tab[xc.." "..zc] then
+					table.insert(ps, {xc, zc, cyaw})
+				end
+			end
+		end
+		local t = {}
+		local maxdist
+		for i = 1,#ps do
+			local x = ps[i][1]
+			local z = ps[i][2]
+			local dist = math.hypot(x,z)
+			if not maxdist then
+				maxdist = dist
+			else
+				maxdist = math.max(dist, maxdist)
+			end
+			t[dist] = ps[i]
+		end
+		if not maxdist then
+			break
+		end
+		x,z,yaw = unpack(t[maxdist])
+	end
+	lin = nil
+	lin2 = tab
 
 	-- set the nodes
 	for i,_ in pairs(lin2) do
