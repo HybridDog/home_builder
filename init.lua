@@ -172,7 +172,7 @@ local function get_roof_ps(wall_ps_list, ps, ps_list)
 				end
 			end
 		end
-	end		
+	end
 	return ps_list
 end
 
