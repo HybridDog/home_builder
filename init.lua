@@ -185,7 +185,7 @@ local function get_wall_dist(pos, wall_ps)
 		return 0
 	end
 	local dist = 1
-	while dist <= 99 do
+	while dist <= 999 do
 		for z = -dist,dist do
 			for x = -dist,dist do
 				if math.abs(x+z) == dist
@@ -196,7 +196,7 @@ local function get_wall_dist(pos, wall_ps)
 		end
 		dist = dist+1
 	end
-	return 100
+	return 1000
 end
 
 -- macht eine Saeule der Wand
