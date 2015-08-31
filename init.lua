@@ -478,7 +478,7 @@ local function get_perlin_field(rmin, rmax, nparams)
 	return tab
 end
 
---[[ tests if it's a round corner
+-- [[ tests if it's a round corner
 local function outcorner(tab, y,x)
 	return (
 		get(tab, y+1,x)
