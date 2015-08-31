@@ -8,6 +8,60 @@ local used_nodes = {
 	bef = "wool:white"
 }
 
+
+-- functions for indexing by x and y
+local function get(tab, y,x)
+	local data = tab[y]
+	if data then
+		return data[x]
+	end
+end
+
+local function set(tab, y,x, data)
+	if tab[y] then
+		tab[y][x] = data
+		return
+	end
+	tab[y] = {[x] = data}
+end
+
+local function remove(tab, y,x)
+	if get(tab, y,x) == nil then
+		return
+	end
+	tab[y][x] = nil
+	if not next(tab[y]) then
+		tab[y] = nil
+	end
+end
+
+local function gtab2tab(tab)
+	local t,n = {},1
+	local miny, minx, maxy, maxx
+	for y,xs in pairs(tab) do
+		if not miny then
+			miny = y
+			maxy = y
+		else
+			miny = math.min(miny, y)
+			maxy = math.max(maxy, y)
+		end
+		for x,v in pairs(xs) do
+			if not minx then
+				minx = x
+				maxx = x
+			else
+				minx = math.min(minx, x)
+				maxx = math.max(maxx, x)
+			end
+			t[n] = {y,x, v}
+			n = n+1
+		end
+	end
+	return t, {x=minx, y=miny}, {x=maxx, y=maxy}, n-1
+end
+
+
 -- findet die naechste Position der Wandsaeulen
 local function get_next_ps(pos, ps)
 	local tab = {}
@@ -16,7 +70,7 @@ local function get_next_ps(pos, ps)
 			{x=pos.x+i, y=pos.y, z=pos.z},
 			{x=pos.x, y=pos.y, z=pos.z+i},
 		}) do
-			if not ps[p.z.." "..p.x]
+			if not get(ps, p.z,p.x)
 			and minetest.get_node(p).name == used_nodes.bef then
 				table.insert(tab, p)
 			end
@@ -25,7 +79,7 @@ local function get_next_ps(pos, ps)
 	for i = -1,1,2 do
 		for j = -1,1,2 do
 			local p = {x=pos.x+i, y=pos.y, z=pos.z+j}
-			if not ps[p.z.." "..p.x]
+			if not get(ps, p.z,p.x)
 			and minetest.get_node(p).name == used_nodes.bef then
 				table.insert(tab, p)
 			end
@@ -44,7 +98,7 @@ local function get_wall_ps(pos)
 	local tab2 = {}
 	local p = get_next_ps(pos, tab)[1]
 	while p do
-		tab[p.z.." "..p.x] = true
+		set(tab, p.z,p.x, true)
 		table.insert(tab2, p)
 		p = get_next_ps(p, tab)[1]
 	end
@@ -101,7 +155,7 @@ local function get_inside_ps(ps, corners)
 	for z = zmin, zmax do
 		local tab,n = {},1
 		for x = xmin, xmax do
-			if ps[z.." "..x] then
+			if get(ps, z,x) then
 				tab[n] = x
 				n = n+1
 			end
@@ -109,14 +163,14 @@ local function get_inside_ps(ps, corners)
 		local count = #tab
 		if count == 2 then
 			for x = tab[1]+1, tab[2]-1 do
-				tab3[z.." "..x] = true
+				set(tab3, z,x, true)
 				tab2[num] = {x=x, z=z}
 				num = num+1
 			end
 		elseif count > 2 then
 			local inside, last
 			for x = tab[1], tab[count] do
-				if ps[z.." "..x] then
+				if get(ps, z,x) then
 					if not last then
 						if inside then
 							inside = false
@@ -128,7 +182,7 @@ local function get_inside_ps(ps, corners)
 				else
 					last = false
 					if inside then
-						tab3[z.." "..x] = true
+						set(tab3, z,x, true)
 						tab2[num] = {x=x, z=z}
 						num = num+1
 					end
@@ -152,10 +206,9 @@ end
 -- gibt die Dach Positionen
 local function get_roof_ps(wall_ps_list, ps, ps_list)
 	for _,p in pairs(wall_ps_list) do
-		local pstr = p.z.." "..p.x
-		if not ps[pstr] then
+		if not get(ps, p.z,p.x) then
 			table.insert(ps_list, p)
-			ps[pstr] = true
+			set(ps, p.z,p.x, true)
 		end
 	end
 	for _,p in pairs(wall_ps_list) do
@@ -164,9 +217,8 @@ local function get_roof_ps(wall_ps_list, ps, ps_list)
 				{x=p.x+i, z=p.z},
 				{x=p.x, z=p.z+i},
 			}) do
-				local pstr = pos.z.." "..pos.x
-				if not ps[pstr] then
-					ps[pstr] = true
+				if not get(ps, pos.z,pos.x) then
+					set(ps, pos.z,pos.x, true)
 					pos.h = true
 					table.insert(ps_list, pos)
 				end
@@ -181,7 +233,7 @@ local function get_wall_dist(pos, wall_ps)
 	if pos.h then
 		return -1
 	end
-	if wall_ps[pos.z.." "..pos.x] then
+	if get(wall_ps, pos.z,pos.x) then
 		return 0
 	end
 	local dist = 1
@@ -189,7 +241,7 @@ local function get_wall_dist(pos, wall_ps)
 		for z = -dist,dist do
 			for x = -dist,dist do
 				if math.abs(x+z) == dist
-				and wall_ps[pos.z+z.." "..pos.x+x] then
+				and get(wall_ps, pos.z+z,pos.x+x) then
 					return dist
 				end
 			end
@@ -429,59 +481,6 @@ local function get_perlin_field(rmin, rmax, nparams)
 	minetest.log("info", string.format("[home_builder] table created after ca. %.2fs", os.clock() - t1))
 	return tab
 end
-
--- functions for indexing by x and y
-local function get(tab, y,x)
-	local data = tab[y]
-	if data then
-		return data[x]
-	end
-end
-
-local function set(tab, y,x, data)
-	if tab[y] then
-		tab[y][x] = data
-		return
-	end
-	tab[y] = {[x] = data}
-end
-
-local function remove(tab, y,x)
-	if get(tab, y,x) == nil then
-		return
-	end
-	tab[y][x] = nil
-	if not next(tab[y]) then
-		tab[y] = nil
-	end
-end
-
-local function gtab2tab(tab)
-	local t,n = {},1
-	local miny, minx, maxy, maxx
-	for y,xs in pairs(tab) do
-		if not miny then
-			miny = y
-			maxy = y
-		else
-			miny = math.min(miny, y)
-			maxy = math.max(maxy, y)
-		end
-		for x,v in pairs(xs) do
-			if not minx then
-				minx = x
-				maxx = x
-			else
-				minx = math.min(minx, x)
-				maxx = math.max(maxx, x)
-			end
-			t[n] = {y,x, v}
-			n = n+1
-		end
-	end
-	return t, {x=minx, y=miny}, {x=maxx, y=maxy}, n-1
-end
-
 
 -- tests if it's a round corner
 local function outcorner(tab, y,x)
