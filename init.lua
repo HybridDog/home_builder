@@ -335,6 +335,7 @@ minetest.register_node("home_builder:block", {
 	end
 })
 
+local make_preparation
 minetest.register_node("home_builder:prep", {
 	description = "Hut Preparation",
 	tiles = {"home_builder.png"},
@@ -345,6 +346,195 @@ minetest.register_node("home_builder:prep", {
 		if not pos then
 			return
 		end
-		--make_preparation(pos)
+		make_preparation(pos)
 	end,
 })
+
+-- returns a perlin chunk field of positions
+local default_nparams = {
+   offset = 0,
+   scale = 1,
+   seed = 3337,
+   octaves = 6,
+   persist = 0.6
+}
+local function get_perlin_field(rmin, rmax, nparams)
+	local t1 = os.clock()
+
+	local r = math.ceil(rmax)
+	nparams = nparams or {}
+	for i,v in pairs(default_nparams) do
+		nparams[i] = nparams[i] or v
+	end
+	nparams.spread = nparams.spread or vector.from_number(r*5)
+
+	local pos = {x=math.random(-30000, 30000), y=math.random(-30000, 30000)}
+	local map = minetest.get_perlin_map(nparams, vector.from_number(r+r+1)):get2dMap_flat(pos)
+
+	local id = 1
+
+	local bare_maxdist = rmax*rmax
+	local bare_mindist = rmin*rmin
+
+	local mindist = math.sqrt(bare_mindist)
+	local dist_diff = math.sqrt(bare_maxdist)-mindist
+	mindist = mindist/dist_diff
+
+	local pval_min, pval_max
+
+	local tab, n = {}, 1
+	for z=-r,r do
+		local bare_dist = z*z
+		for x=-r,r do
+			local bare_dist = bare_dist+x*x
+			local add = bare_dist < bare_mindist
+			local pval, distdiv
+			if not add
+			and bare_dist <= bare_maxdist then
+				distdiv = math.sqrt(bare_dist)/dist_diff-mindist
+				pval = math.abs(map[id]) -- strange perlin values…
+				if not pval_min then
+					pval_min = pval
+					pval_max = pval
+				else
+					pval_min = math.min(pval, pval_min)
+					pval_max = math.max(pval, pval_max)
+				end
+				add = true--distdiv < 1-math.abs(map[id])
+			end
+
+			if add then
+				tab[n] = {z,x, pval, distdiv}
+				n = n+1
+			end
+			id = id+1
+		end
+	end
+
+	-- change strange values
+	local pval_diff = pval_max - pval_min
+	pval_min = pval_min/pval_diff
+
+	for n,i in pairs(tab) do
+		if i[3] then
+			local new_pval = math.abs(i[3]/pval_diff - pval_min)
+			if i[4] < new_pval then
+				tab[n] = {i[1], i[2]}
+			else
+				tab[n] = nil
+			end
+		end
+	end
+
+	minetest.log("info", string.format("[home_builder] table created after ca. %.2fs", os.clock() - t1))
+	return tab
+end
+
+-- functions for indexing by x and y
+local function get(tab, y,x)
+	local data = tab[y]
+	if data then
+		return data[x]
+	end
+end
+
+local function set(tab, y,x, data)
+	if tab[y] then
+		tab[y][x] = data
+		return
+	end
+	tab[y] = {[x] = data}
+end
+
+local function remove(tab, y,x)
+	if get(tab, y,x) == nil then
+		return
+	end
+	tab[y][x] = nil
+	if not next(tab[y]) then
+		tab[y] = nil
+	end
+end
+
+local function gtab2tab(tab)
+	local t,n = {},1
+	local miny, minx, maxy, maxx
+	for y,xs in pairs(tab) do
+		if not miny then
+			miny = y
+			maxy = y
+		else
+			miny = math.min(miny, y)
+			maxy = math.max(maxy, y)
+		end
+		for x,v in pairs(xs) do
+			if not minx then
+				minx = x
+				maxx = x
+			else
+				minx = math.min(minx, x)
+				maxx = math.max(maxx, x)
+			end
+			t[n] = {y,x, v}
+			n = n+1
+		end
+	end
+	return t, {x=minx, y=miny}, {x=maxx, y=maxy}, n-1
+end
+
+
+-- tests if it's a round corner
+local function outcorner(tab, y,x)
+	return (
+		get(tab, y+1,x)
+		or get(tab, y-1,x)
+	)
+	and (
+		get(tab, y,x+1)
+		or get(tab, y,x-1)
+	)
+end
+
+-- filters possible wall positions from the perlin field
+local function get_wall_ps(rmin, rmax)
+	local tab = get_perlin_field(rmin, rmax)
+	local gtab = {}
+	for _,p in pairs(tab) do
+		set(gtab, p[1],p[2], true)
+	end
+	for _,p in pairs(tab) do
+		local y,x = unpack(p)
+		local is_wall
+		for i = -1,1,2 do
+			if get(gtab, y+i,x) == nil
+			or get(gtab, y,x+i) == nil then
+				is_wall = true
+				break
+			end
+		end
+		if not is_wall then
+			set(gtab, y,x, false)
+		end
+	end
+	for _,p in pairs(tab) do
+		local y,x = unpack(p)
+		if get(gtab, y,x)
+		and outcorner(gtab, y,x) then
+			remove(gtab, y,x)
+		end
+	end
+	return gtab2tab(gtab)
+end
+
+-- places the nodes
+function make_preparation(pos)
+	local tab,minp,maxp = get_wall_ps(5,10)
+	for _,p in pairs(tab) do
+		if p[3] then
+			p = {x=pos.x+p[2], y=pos.y, z=pos.z+p[1]}
+			if minetest.get_node(p).name == "air" then
+				minetest.set_node(p, {name=used_nodes.bef})
+			end
+		end
+	end
+end
