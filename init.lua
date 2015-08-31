@@ -528,7 +528,7 @@ end
 
 -- places the nodes
 function make_preparation(pos)
-	local tab,minp,maxp = get_wall_ps(5,10)
+	local tab,minp,maxp = get_wall_ps(5,20)
 	for _,p in pairs(tab) do
 		if p[3] then
 			p = {x=pos.x+p[2], y=pos.y, z=pos.z+p[1]}
