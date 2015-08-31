@@ -294,3 +294,46 @@ minetest.register_node("home_builder:prep", {
 		make_preparation(pos)
 	end,
 })
+
+--[[ gibt die Positionen innerhalb an (hoffentlich)
+local function get_inside_ps(ps, corners)
+	local xmin, xmax, zmin, zmax = unpack(corners)
+	local tab2,num = {},1
+	local tab3 = {}
+	for z = zmin, zmax do
+		local tab,n = {},1
+		for x = xmin, xmax do
+			if get(ps, z,x) then
+				tab[n] = x
+				n = n+1
+			end
+		end
+		local count = #tab
+		if count == 2 then
+			for x = tab[1]+1, tab[2]-1 do
+				set(tab3, z,x, true)
+				tab2[num] = {x=x, z=z}
+				num = num+1
+			end
+		elseif count > 2 then
+			local inside, last
+			for x = tab[1], tab[count] do
+				if get(ps, z,x) then
+					if not last then
+						inside = not inside
+					end
+					last = true
+				else
+					last = false
+					if inside then
+						set(tab3, z,x, true)
+						tab2[num] = {x=x, z=z}
+						num = num+1
+					end
+				end
+			end
+		end
+	end
+	return tab3, tab2
+end--]]
+

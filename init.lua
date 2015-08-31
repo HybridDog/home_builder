@@ -62,7 +62,7 @@ local function gtab2tab(tab)
 end
 
 
--- findet die naechste Position der Wandsaeulen
+-- findet die nächste Position der Wandsäulen
 local function get_next_ps(pos, ps)
 	local tab = {}
 	for i = -1,1,2 do
@@ -88,7 +88,7 @@ local function get_next_ps(pos, ps)
 	return tab
 end
 
--- gibt die Positionen der Wandsaeulen an
+-- gibt die Positionen der Wandsäulen an
 local function get_wall_ps(pos)
 	pos.y = pos.y-1
 	if minetest.get_node(pos).name ~= used_nodes.bef then
@@ -113,11 +113,14 @@ local function get_minmax_coord(oldmin, oldmax, new)
 	return math.min(oldmin, new), math.max(oldmax, new)
 end
 
---[[ gibt die Positionen innerhalb an und funktioniert irgendwie nicht richtig (Wandpruefung)
+-- [[ gibt die Positionen innerhalb an und funktioniert irgendwie nicht richtig (Wandprüfung) und erneuert die Wand Positionen
 local function get_inside_ps(startpos, ps, corners)
 	local todo = {startpos}
+	local avoid = {}
 	local tab2 = {}
-	local tab3 = {}
+	local itab = {}
+	local new_wall_ps = {}
+	local new_wall_tab = {}
 	while next(todo) do
 		for n,pos in pairs(todo) do
 			for i = -1,1,2 do
@@ -125,17 +128,21 @@ local function get_inside_ps(startpos, ps, corners)
 					{x=pos.x+i, z=pos.z},
 					{x=pos.x, z=pos.z+i},
 				}) do
-					if p.x < corners[1]
-					or p.x > corners[2]
-					or p.z < corners[3]
-					or p.z > corners[4] then
-						return tab2, tab3
+					local z,x = p.z,p.x
+					if x < corners[1]
+					or x > corners[2]
+					or z < corners[3]
+					or z > corners[4] then
+						return tab2, itab, new_wall_ps, new_wall_tab
 					end
-					local pstr = p.z.." "..p.x
-					if not get(tab2, p.z,p.x) then
-						set(tab2, p.z,p.x, true)
-						table.insert(tab3, p)
-						if not get(ps, p.z,p.x) then
+					if not get(avoid, z,x) then
+						set(avoid, z,x, true)
+						if get(ps, z,x) then
+							set(new_wall_ps, z,x, true)
+							table.insert(new_wall_tab, p)
+						else
+							set(tab2, z,x, true)
+							table.insert(itab, p)
 							table.insert(todo, p)
 						end
 					end
@@ -144,50 +151,8 @@ local function get_inside_ps(startpos, ps, corners)
 			todo[n] = nil
 		end
 	end
-	return tab2, tab3
+	return tab2, itab, new_wall_ps, new_wall_tab
 end--]]
-
--- gibt die Positionen innerhalb an (hoffentlich)
-local function get_inside_ps(ps, corners)
-	local xmin, xmax, zmin, zmax = unpack(corners)
-	local tab2,num = {},1
-	local tab3 = {}
-	for z = zmin, zmax do
-		local tab,n = {},1
-		for x = xmin, xmax do
-			if get(ps, z,x) then
-				tab[n] = x
-				n = n+1
-			end
-		end
-		local count = #tab
-		if count == 2 then
-			for x = tab[1]+1, tab[2]-1 do
-				set(tab3, z,x, true)
-				tab2[num] = {x=x, z=z}
-				num = num+1
-			end
-		elseif count > 2 then
-			local inside, last
-			for x = tab[1], tab[count] do
-				if get(ps, z,x) then
-					if not last then
-						inside = not inside
-					end
-					last = true
-				else
-					last = false
-					if inside then
-						set(tab3, z,x, true)
-						tab2[num] = {x=x, z=z}
-						num = num+1
-					end
-				end
-			end
-		end
-	end
-	return tab3, tab2
-end
 
 -- gibt die Boden Positionen
 local function get_floor_ps(ps, ps_list)
@@ -196,7 +161,7 @@ local function get_floor_ps(ps, ps_list)
 		xmin, xmax = get_minmax_coord(xmin, xmax, p.x)
 		zmin, zmax = get_minmax_coord(zmin, zmax, p.z)
 	end
-	return get_inside_ps(ps, {xmin-1, xmax+1, zmin-1, zmax+1}) --{x=(xmin+xmax)*0.5, z=(zmax+zmin)*0.5}
+	return get_inside_ps({x=math.floor((xmin+xmax)/2), z=math.floor((zmin+zmax)/2)}, ps, {xmin-1, xmax+1, zmin-1, zmax+1}) --{x=(xmin+xmax)*0.5, z=(zmax+zmin)*0.5}
 end
 
 -- gibt die Dach Positionen
@@ -221,7 +186,6 @@ local function get_roof_ps(wall_ps_list, ps, ps_list)
 			end
 		end
 	end
-	return ps_list
 end
 
 -- gibt die Distanz zur naechsten Wandsaeule
@@ -280,8 +244,7 @@ local function make_floor_node(x, y, z)
 end
 
 -- erstellt den Boden und das Dach
-local function make_floor_and_roof(wall_ps, wall_ps_list, y)
-	local ps,ps_list = get_floor_ps(wall_ps, wall_ps_list)
+local function make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, y)
 	y = y-1
 	for _,p in pairs(ps_list) do
 		make_floor_node(p.x, y, p.z)
@@ -290,7 +253,7 @@ local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 		make_floor_node(p.x, y, p.z)
 	end]]
 	y = y+1
-	ps_list = get_roof_ps(wall_ps_list, ps, ps_list)
+	get_roof_ps(wall_ps_list, ps, ps_list)
 	for _,p in pairs(ps_list) do
 		local h = get_wall_dist(p, wall_ps)/2
 		local h2 = math.ceil(h)
@@ -306,8 +269,9 @@ local function make_floor_and_roof(wall_ps, wall_ps_list, y)
 end
 
 -- erstellt die Wände
-local function make_walls(ps_list)
-	for _,p in ipairs(ps_list) do
+local function make_walls(ps_list, y)
+	for _,p in pairs(ps_list) do
+		p.y = y
 		make_wall(p)
 	end
 	glass_count = -1
@@ -320,8 +284,13 @@ local function make_house(pos)
 	or #wall_ps_list < 2 then
 		return
 	end
-	make_walls(wall_ps_list)
-	make_floor_and_roof(wall_ps, wall_ps_list, pos.y)
+	local ps,ps_list, wall_ps,wall_ps_list = get_floor_ps(wall_ps, wall_ps_list)
+	if not ps
+	or #wall_ps_list < 2 then
+		return
+	end
+	make_walls(wall_ps_list, pos.y)
+	make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, pos.y)
 	--[[for i,_ in pairs(wall_ps) do
 		local coords = string.split(i, " ")
 		local p = {x=coords[2], y=pos.y, z=coords[1]}
