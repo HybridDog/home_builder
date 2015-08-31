@@ -115,12 +115,11 @@ end
 
 --[[ gibt die Positionen innerhalb an und funktioniert irgendwie nicht richtig (Wandpruefung)
 local function get_inside_ps(startpos, ps, corners)
-	local tab = {startpos}
+	local todo = {startpos}
 	local tab2 = {}
 	local tab3 = {}
-	while tab[1] do
-		for n,pos in pairs(tab) do
-			tab[n] = nil
+	while next(todo) do
+		for n,pos in pairs(todo) do
 			for i = -1,1,2 do
 				for _,p in pairs({
 					{x=pos.x+i, z=pos.z},
@@ -133,19 +132,20 @@ local function get_inside_ps(startpos, ps, corners)
 						return tab2, tab3
 					end
 					local pstr = p.z.." "..p.x
-					if not tab2[pstr] then
-						tab2[pstr] = true
+					if not get(tab2, p.z,p.x) then
+						set(tab2, p.z,p.x, true)
 						table.insert(tab3, p)
-						if not ps[pstr] then
-							table.insert(tab, p)
+						if not get(ps, p.z,p.x) then
+							table.insert(todo, p)
 						end
 					end
 				end
 			end
+			todo[n] = nil
 		end
 	end
 	return tab2, tab3
-end]]
+end--]]
 
 -- gibt die Positionen innerhalb an (hoffentlich)
 local function get_inside_ps(ps, corners)
@@ -172,11 +172,7 @@ local function get_inside_ps(ps, corners)
 			for x = tab[1], tab[count] do
 				if get(ps, z,x) then
 					if not last then
-						if inside then
-							inside = false
-						else
-							inside = true
-						end
+						inside = not inside
 					end
 					last = true
 				else
@@ -482,7 +478,7 @@ local function get_perlin_field(rmin, rmax, nparams)
 	return tab
 end
 
--- tests if it's a round corner
+--[[ tests if it's a round corner
 local function outcorner(tab, y,x)
 	return (
 		get(tab, y+1,x)
@@ -492,7 +488,7 @@ local function outcorner(tab, y,x)
 		get(tab, y,x+1)
 		or get(tab, y,x-1)
 	)
-end
+end--]]
 
 -- filters possible wall positions from the perlin field
 local function get_wall_ps(rmin, rmax)
