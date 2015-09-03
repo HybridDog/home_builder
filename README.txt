@@ -5,4 +5,4 @@ after: http://i.imgur.com/uqZdK8Z.png
 TODO:
 — add more nodes and textures
 — add new houses
-— fix clean_tab
+— use it for swamp huts

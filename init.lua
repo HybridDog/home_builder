@@ -1,12 +1,23 @@
 local used_nodes = {
-	wall = "default:stone",
-	glass = "default:glass",
 	floor1 = "default:cobble",
 	floor2 = "default:desert_cobble",
+	wall = "default:stone",
+	glass = "default:glass",
 	roof1 = "default:wood",
 	roof2 = "stairs:slab_wood",
 	bef = "wool:white"
 }
+
+local function log(msg, t)
+	local info
+	if t then
+		info = string.format("[home_builder] "..msg.." after ca. %.2fs", os.clock() - t)
+	else
+		info = "[home_builder] "..msg
+	end
+	minetest.log("info", info)
+	minetest.chat_send_all(info)
+end
 
 
 -- functions for indexing by x and y
@@ -61,6 +72,72 @@ local function gtab2tab(tab)
 	return t, {x=minx, y=miny}, {x=maxx, y=maxy}, n-1
 end
 
+
+local typ_order = {"floor1", "floor2", "wall", "glass", "roof1", "roof2"}
+
+local function place_nodes(tab)
+	log("setting nodes")
+	for typ,ps in pairs(tab) do
+		local node = {name=used_nodes[typ_order[typ]]}
+		for _,p in pairs(ps) do
+			local z,y,x = unpack(p)
+			minetest.set_node({x=x,y=y,z=z}, node)
+		end
+	end
+	log("done")
+end
+
+local function vmanip_nodes(tab, nodes, area)
+	for typ,ps in pairs(tab) do
+		local id = minetest.get_content_id(used_nodes[typ_order[typ]])
+		for _,p in pairs(ps) do
+			local z,y,x = unpack(p)
+			nodes[area:index(x,y,z)] = id
+		end
+	end
+end
+
+local function vmanip_spawn_nodes(tab)
+	local t1 = os.clock()
+
+	local minz,miny,minx, maxz,maxy,maxx
+	for _,ps in pairs(tab) do
+		for _,p in pairs(ps) do
+			local z,y,x = unpack(p)
+			if not minz then
+				minz = z
+				miny = y
+				minx = x
+				maxz = z
+				maxy = y
+				maxx = x
+			else
+				minz = math.min(z, minz)
+				miny = math.min(y, miny)
+				minx = math.min(x, minx)
+				maxz = math.max(z, maxz)
+				maxy = math.max(y, maxy)
+				maxx = math.max(x, maxx)
+			end
+		end
+	end
+	minp = {x=minx, y=miny, z=minz}
+	maxp = {x=maxx, y=maxy, z=maxz}
+
+	local manip = minetest.get_voxel_manip()
+	local emerged_pos1, emerged_pos2 = manip:read_from_map(minp, maxp)
+	local area = VoxelArea:new({MinEdge=emerged_pos1, MaxEdge=emerged_pos2})
+	local nodes = manip:get_data()
+
+	vmanip_nodes(tab, nodes, area)
+
+	manip:set_data(nodes)
+	manip:write_to_map()
+	log("nodes set after ", t1)
+	t1 = os.clock()
+	manip:update_map()
+	log("map updated", t1)
+end
 
 -- findet die nächste Position der Wandsäulen
 local function get_next_ps(pos, ps)
@@ -133,7 +210,7 @@ local function get_inside_ps(startpos, ps, corners)
 					or x > corners[2]
 					or z < corners[3]
 					or z > corners[4] then
-						return tab2, itab, new_wall_ps, new_wall_tab
+						return false
 					end
 					if not get(avoid, z,x) then
 						set(avoid, z,x, true)
@@ -213,68 +290,80 @@ end
 
 -- macht eine Saeule der Wand
 local glass_count = -1
-local function make_wall(pos)
+local function make_wall(tab, z,y,x)
 	local used_block = used_nodes.wall
 	local nam
-	minetest.set_node(pos, {name=used_block})
-	minetest.set_node({x=pos.x, y=pos.y-1, z=pos.z}, {name=used_block})
+	local n = #tab[3]+1
+	tab[3][n] = {z,y-1,x}
+	tab[3][n+1] = {z,y,x}
 	if glass_count >= 8
 	or (math.random(8) == 1 and glass_count >= 4)
 	or glass_count == -1 then
-		nam = used_block
+		nam = 3
 		glass_count = 0
 	else
-		nam = used_nodes.glass
+		nam = 4
 		glass_count = glass_count+1
 	end
 	for i = 1,3 do
-		minetest.set_node({x=pos.x, y=pos.y+i, z=pos.z}, {name=nam})
+		tab[nam][#tab[nam]+1] = {z,y+i,x}
 	end
 end
 
 -- macht einen Block des Bodens
-local function make_floor_node(x, y, z)
+local function make_floor_node(tab, z,y,x)
+	local typ
 	if z%2 == 0
 	or (x%4 == 1 and z%4 == 1)
 	or (x%4 == 3 and z%4 == 3) then
-		minetest.set_node({x=x, y=y, z=z}, {name=used_nodes.floor1})
+		typ = 1
 	else
-		minetest.set_node({x=x, y=y, z=z}, {name=used_nodes.floor2})
+		typ = 2
 	end
+	tab[typ][#tab[typ]+1] = {z,y,x}
 end
 
 -- erstellt den Boden und das Dach
-local function make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, y)
+local function make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, y, tab)
 	y = y-1
 	for _,p in pairs(ps_list) do
-		make_floor_node(p.x, y, p.z)
+		make_floor_node(tab, p.z,y,p.x)
 	end
-	--[[for _,p in pairs(wall_ps_list) do
-		make_floor_node(p.x, y, p.z)
-	end]]
 	y = y+1
 	get_roof_ps(wall_ps_list, ps, ps_list)
+	local n1 = 1
+	local n2 = 1
 	for _,p in pairs(ps_list) do
 		local h = get_wall_dist(p, wall_ps)/2
 		local h2 = math.ceil(h)
 		if h == h2 then
-			minetest.set_node({x=p.x, y=y+4+h, z=p.z}, {name=used_nodes.roof1})
+			tab[5][n1] = {p.z,y+4+h,p.x}
+			n1 = n1+1
 		else
-			minetest.set_node({x=p.x, y=y+4+h2, z=p.z}, {name=used_nodes.roof2})
+			tab[6][n2] = {p.z,y+4+h2,p.x}
+			n2 = n2+1
 		end
 	end
-	--[[for _,p in pairs(wall_ps_list) do
-		minetest.set_node({x=p.x, y=y+5, z=p.z}, {name="default:desert_stone"})
-	end]]
 end
 
 -- erstellt die Wände
-local function make_walls(ps_list, y)
+local function make_walls(ps_list, y, tab)
 	for _,p in pairs(ps_list) do
-		p.y = y
-		make_wall(p)
+		make_wall(tab, p.z,y,p.x)
 	end
 	glass_count = -1
+end
+
+local function get_hut_node_ps(wall_ps, wall_ps_list, y)
+	local ps,ps_list, wall_ps,wall_ps_list = get_floor_ps(wall_ps, wall_ps_list)
+	local node_ps = {{},{},{},{},{},{}}
+	if not ps
+	or #wall_ps_list < 2 then
+		return node_ps
+	end
+	make_walls(wall_ps_list, y, node_ps)
+	make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, y, node_ps)
+	return node_ps
 end
 
 -- erstellt das haus
@@ -284,18 +373,8 @@ local function make_house(pos)
 	or #wall_ps_list < 2 then
 		return
 	end
-	local ps,ps_list, wall_ps,wall_ps_list = get_floor_ps(wall_ps, wall_ps_list)
-	if not ps
-	or #wall_ps_list < 2 then
-		return
-	end
-	make_walls(wall_ps_list, pos.y)
-	make_floor_and_roof(ps,ps_list, wall_ps, wall_ps_list, pos.y)
-	--[[for i,_ in pairs(wall_ps) do
-		local coords = string.split(i, " ")
-		local p = {x=coords[2], y=pos.y, z=coords[1]}
-		make_wall(p)
-	end]]
+	local node_ps = get_hut_node_ps(wall_ps, wall_ps_list, pos.y)
+	vmanip_spawn_nodes(node_ps)
 end
 
 minetest.register_node("home_builder:block", {
@@ -447,7 +526,7 @@ local function get_perlin_field(rmin, rmax, nparams)
 	return tab
 end
 
--- [[ tests if it's a round corner
+--[[ tests if it's a round corner
 local function outcorner(tab, y,x)
 	return (
 		get(tab, y+1,x)
@@ -480,19 +559,19 @@ local function get_wall_ps(rmin, rmax)
 			set(gtab, y,x, false)
 		end
 	end
-	for _,p in pairs(tab) do
+	--[[for _,p in pairs(tab) do
 		local y,x = unpack(p)
 		if get(gtab, y,x)
 		and outcorner(gtab, y,x) then
 			remove(gtab, y,x)
 		end
-	end
-	return gtab2tab(gtab)
+	end--]]
+	return gtab,gtab2tab(gtab)
 end
 
 -- places the nodes
 function make_preparation(pos)
-	local tab,minp,maxp = get_wall_ps(5,20)
+	local _,tab = get_wall_ps(5,20)
 	for _,p in pairs(tab) do
 		if p[3] then
 			p = {x=pos.x+p[2], y=pos.y, z=pos.z+p[1]}
@@ -501,4 +580,40 @@ function make_preparation(pos)
 			end
 		end
 	end
+end
+
+local spawn_hut
+minetest.register_node("home_builder:spawn_hut", {
+	description = "Hut Spawner",
+	tiles = {"home_builder.png^[brighten"},
+	groups = {snappy=1,bendy=2,cracky=1},
+	sounds = default.node_sound_stone_defaults(),
+	on_place = function(_, _, pointed_thing)
+		local pos = pointed_thing.above
+		if not pos then
+			return
+		end
+		spawn_hut(pos, 5,16)
+	end,
+})
+
+function spawn_hut(pos, rmin, rmax)
+	local _, wall_ps_list_rel = get_wall_ps(rmin, rmax)
+	local wall_ps = {}
+	local wall_ps_list,n = {},1
+	for _,p in pairs(wall_ps_list_rel) do
+		if p[3] then
+			local x = pos.x+p[2]
+			local z = pos.z+p[1]
+			wall_ps_list[n] = {x=x, y=pos.y, z=z}
+			n = n+1
+			set(wall_ps, z,x, true)
+		end
+	end
+	if not wall_ps
+	or #wall_ps_list < 2 then
+		return
+	end
+	local node_ps = get_hut_node_ps(wall_ps, wall_ps_list, pos.y)
+	vmanip_spawn_nodes(node_ps)
 end
